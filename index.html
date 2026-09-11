@@ -675,7 +675,9 @@
   }
 
   // ---------- Gradient descent step ----------
-  function resetToPoint(w1, w2){
+  // Sets the ball's position/state only — does not touch the chart.
+  // Safe to call before the chart has been drawn for the first time.
+  function setPoint(w1, w2){
     pause();
     pos = {w1, w2};
     vel = {w1:0, w2:0};
@@ -684,6 +686,12 @@
     const z = zAt(currentKey, w1, w2);
     path = [[w1, w2, z]];
     setStatus("Ready. Press Play or Step to start descending.", "");
+  }
+
+  // Sets the ball's position AND refreshes the already-drawn chart.
+  // Only call this after fullRedraw() has run at least once.
+  function resetToPoint(w1, w2){
+    setPoint(w1, w2);
     restyleMoving();
   }
 
@@ -781,7 +789,7 @@
     buildSurfaceButtons();
     buildPresetButtons();
     const preset = SURFACES[key].presets[0];
-    resetToPoint(preset.w1, preset.w2);
+    setPoint(preset.w1, preset.w2);
     fullRedraw();
   }
 
@@ -830,7 +838,6 @@
   document.getElementById("btn-play").onclick = ()=> playing ? pause() : play();
   document.getElementById("btn-step").onclick = ()=> { pause(); doStep(); };
   document.getElementById("btn-reset").onclick = ()=> {
-    const preset = SURFACES[currentKey].presets[0];
     resetToPoint(pos.w1, pos.w2); // keep current start, clear velocity/path
   };
   document.getElementById("btn-random").onclick = ()=>{
@@ -858,7 +865,7 @@
 
   buildSurfaceButtons();
   buildPresetButtons();
-  resetToPoint(-4, 4);
+  setPoint(-4, 4);
   fullRedraw();
 
   window.addEventListener("resize", ()=>{
