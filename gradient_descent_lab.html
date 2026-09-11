@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chasing the Minimum — Gradient Descent Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"></script>
+<style>
+  :root{
+    --bg: #0F1512;
+    --panel: #161F1A;
+    --panel-2: #1B251F;
+    --line: #2A362C;
+    --text: #EDE7DA;
+    --muted: #8FA091;
+    --amber: #E3A857;
+    --amber-dim: #7A5E33;
+    --teal: #6FAF9E;
+    --warn: #D9836F;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+
+  #app{
+    display:grid;
+    grid-template-columns: 340px 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "header header"
+      "sidebar main";
+    height:100vh;
+    min-height:640px;
+  }
+
+  header{
+    grid-area: header;
+    padding: 22px 28px 16px 28px;
+    border-bottom: 1px solid var(--line);
+    display:flex;
+    align-items:baseline;
+    gap:18px;
+    flex-wrap: wrap;
+  }
+  header h1{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size: 26px;
+    margin:0;
+    letter-spacing: 0.2px;
+  }
+  header p{
+    margin:0;
+    color: var(--muted);
+    font-size: 13.5px;
+    max-width: 640px;
+    line-height:1.5;
+  }
+
+  #sidebar{
+    grid-area: sidebar;
+    border-right: 1px solid var(--line);
+    background: var(--panel);
+    overflow-y: auto;
+    padding: 20px 20px 40px 20px;
+  }
+
+  section.control{
+    margin-bottom: 26px;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--line);
+  }
+  section.control:last-child{ border-bottom:none; }
+
+  .control h2{
+    font-size: 12.5px;
+    font-weight: 600;
+    margin: 0 0 10px 0;
+    color: var(--teal);
+    letter-spacing: 0.3px;
+  }
+
+  .surface-grid{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .surf-btn{
+    text-align:left;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-left: 3px solid transparent;
+    padding: 9px 10px;
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 13.5px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .surf-btn:hover{ background: var(--panel-2); }
+  .surf-btn.active{
+    border-left: 3px solid var(--amber);
+    background: var(--panel-2);
+    color: var(--amber);
+  }
+
+  .note{
+    margin-top: 10px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--muted);
+    padding: 10px 12px;
+    background: var(--panel-2);
+    border-left: 2px solid var(--line);
+  }
+
+  .preset-row{
+    display:flex;
+    flex-wrap: wrap;
+    gap:6px;
+    margin-bottom: 8px;
+  }
+  .chip{
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 12px;
+    padding: 6px 9px;
+    cursor:pointer;
+  }
+  .chip:hover{ border-color: var(--teal); color: var(--teal); }
+  .hint{
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .slider-row{ margin-bottom: 14px; }
+  .slider-label{
+    display:flex;
+    justify-content: space-between;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .slider-label span.val{
+    color: var(--amber);
+    font-family:'IBM Plex Mono', monospace;
+  }
+  input[type=range]{
+    -webkit-appearance:none;
+    width:100%;
+    height: 2px;
+    background: var(--line);
+    outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:13px; height:13px;
+    border-radius:50%;
+    background: var(--amber);
+    cursor:pointer;
+    margin-top:-6px;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:13px; height:13px;
+    border-radius:50%;
+    background: var(--amber);
+    border:none;
+    cursor:pointer;
+  }
+  input[type=range]::-moz-range-track{
+    height:2px; background: var(--line);
+  }
+
+  .btn-row{ display:flex; gap:8px; margin-top:6px; flex-wrap: wrap; }
+  .btn{
+    flex:1;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 9px 8px;
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 13px;
+    cursor:pointer;
+    min-width: 70px;
+  }
+  .btn:hover{ border-color: var(--amber); }
+  .btn.primary{
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  .btn.primary.playing{
+    background: var(--amber);
+    color: #1a1206;
+  }
+  .btn.wide{ flex-basis: 100%; }
+
+  .toggle-row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 13.5px;
+  }
+  .switch{
+    position:relative;
+    width: 36px; height: 20px;
+    background: var(--line);
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .switch .knob{
+    position:absolute;
+    top:2px; left:2px;
+    width:16px; height:16px;
+    background: var(--muted);
+    transition: left .15s, background .15s;
+  }
+  .switch.on{ background: var(--amber-dim); }
+  .switch.on .knob{ left: 18px; background: var(--amber); }
+
+  #main{
+    grid-area: main;
+    display:grid;
+    grid-template-rows: 1.55fr 1fr;
+    gap: 1px;
+    background: var(--line);
+    overflow:hidden;
+  }
+  #plot3d, #plot2d-wrap{
+    background: var(--bg);
+    position:relative;
+  }
+  #plot3d{ min-height: 260px; }
+  #plot2d-wrap{
+    display:grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap:1px;
+    background: var(--line);
+  }
+  #plot2d{ background: var(--bg); min-height:200px; }
+
+  #readout{
+    background: var(--panel);
+    padding: 16px 20px;
+    overflow-y:auto;
+  }
+  #readout h2{
+    font-size: 12.5px;
+    font-weight:600;
+    color: var(--teal);
+    margin: 0 0 12px 0;
+  }
+  .stat{
+    display:flex;
+    justify-content:space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13.5px;
+  }
+  .stat .k{ color: var(--muted); }
+  .stat .v{ font-family:'IBM Plex Mono', monospace; color: var(--text); }
+  #status-line{
+    margin-top: 14px;
+    padding: 10px 12px;
+    font-size: 13px;
+    border-left: 2px solid var(--teal);
+    background: var(--panel-2);
+    color: var(--text);
+    line-height:1.5;
+  }
+  #status-line.warn{ border-left-color: var(--warn); color: var(--warn); }
+  #status-line.good{ border-left-color: var(--amber); color: var(--amber); }
+
+  @media (max-width: 880px){
+    #app{
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto 1fr;
+      grid-template-areas:
+        "header"
+        "sidebar"
+        "main";
+      height:auto;
+    }
+    #sidebar{ border-right:none; border-bottom:1px solid var(--line); max-height: 46vh; }
+    #plot2d-wrap{ grid-template-columns: 1fr; grid-template-rows: 220px auto; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>Chasing the Minimum</h1>
+    <p>Pick a loss landscape, drop a ball anywhere on it, and watch how the starting point, learning rate, and momentum change the way it finds — or fails to find — the bottom.</p>
+  </header>
+
+  <div id="sidebar">
+
+    <section class="control">
+      <h2>Landscape</h2>
+      <div class="surface-grid" id="surface-buttons"></div>
+      <div class="note" id="surface-note"></div>
+    </section>
+
+    <section class="control">
+      <h2>Starting point</h2>
+      <div class="preset-row" id="preset-buttons"></div>
+      <div class="btn-row">
+        <button class="btn" id="btn-random">Random start</button>
+      </div>
+      <div class="hint">Or click anywhere on either graph to drop the ball there.</div>
+    </section>
+
+    <section class="control">
+      <h2>Learning rate</h2>
+      <div class="slider-row">
+        <div class="slider-label"><span>Step size (η)</span><span class="val mono" id="lr-val">0.05</span></div>
+        <input type="range" id="lr-slider" min="0" max="100" value="35">
+      </div>
+    </section>
+
+    <section class="control">
+      <h2>Momentum</h2>
+      <div class="slider-row">
+        <div class="slider-label"><span>Carry-over (β)</span><span class="val mono" id="mo-val">0.00</span></div>
+        <input type="range" id="mo-slider" min="0" max="95" value="0">
+      </div>
+    </section>
+
+    <section class="control">
+      <h2>Playback</h2>
+      <div class="btn-row">
+        <button class="btn primary" id="btn-play">Play</button>
+        <button class="btn" id="btn-step">Step</button>
+        <button class="btn" id="btn-reset">Reset</button>
+      </div>
+      <div class="slider-row" style="margin-top:14px;">
+        <div class="slider-label"><span>Playback speed</span><span class="val mono" id="speed-val">medium</span></div>
+        <input type="range" id="speed-slider" min="1" max="3" value="2">
+      </div>
+    </section>
+
+    <section class="control">
+      <h2>Display</h2>
+      <div class="toggle-row">
+        <span>Show path trail</span>
+        <div class="switch on" id="toggle-trail"><div class="knob"></div></div>
+      </div>
+      <div class="toggle-row">
+        <span>Show gradient arrow (top view)</span>
+        <div class="switch on" id="toggle-grad"><div class="knob"></div></div>
+      </div>
+    </section>
+
+  </div>
+
+  <div id="main">
+    <div id="plot3d"></div>
+    <div id="plot2d-wrap">
+      <div id="plot2d"></div>
+      <div id="readout">
+        <h2>Readout</h2>
+        <div class="stat"><span class="k">Iteration</span><span class="v mono" id="s-iter">0</span></div>
+        <div class="stat"><span class="k">w₁</span><span class="v mono" id="s-w1">–</span></div>
+        <div class="stat"><span class="k">w₂</span><span class="v mono" id="s-w2">–</span></div>
+        <div class="stat"><span class="k">Loss J(w)</span><span class="v mono" id="s-loss">–</span></div>
+        <div class="stat"><span class="k">|∇J|</span><span class="v mono" id="s-grad">–</span></div>
+        <div id="status-line">Pick a landscape and a starting point, then press Play.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+
+  // ---------- Loss surface definitions ----------
+  const RANGE = [-5, 5];
+  const GRID_N = 65;
+
+  const SURFACES = {
+    bowl: {
+      label: "Simple bowl",
+      z: (a,b) => (a-2)*(a-2) + (b+1)*(b+1),
+      note: "A single smooth minimum in every direction. Even a fairly large step size still finds the bottom — there's nowhere to get stuck.",
+      marker: { type:"fixed", w1:2, w2:-1, label:"Minimum" },
+      presets: [
+        {label:"Far corner", w1:-4, w2:4},
+        {label:"Near minimum", w1:2.6, w2:-0.4},
+        {label:"Opposite corner", w1:4, w2:-4}
+      ]
+    },
+    valley: {
+      label: "Narrow valley",
+      z: (a,b) => 0.15*(a-2)*(a-2) + 3.5*(b+1)*(b+1),
+      note: "The floor is a steep, narrow trough. A step size sized for the steep direction makes the ball bounce wall-to-wall instead of sliding along the shallow direction. Add momentum to smooth it out.",
+      marker: { type:"fixed", w1:2, w2:-1, label:"Minimum" },
+      presets: [
+        {label:"On the steep wall", w1:2, w2:4},
+        {label:"Along the shallow floor", w1:-4, w2:-0.8},
+        {label:"Far corner", w1:-4, w2:4}
+      ]
+    },
+    saddle: {
+      label: "Saddle point",
+      z: (a,b) => 0.6*a*a - 0.6*b*b,
+      note: "There is no minimum here — the middle is flat in one direction and curves the wrong way in the other. Drop the ball exactly on the saddle and watch it barely move; nudge it slightly and it slides away.",
+      marker: { type:"saddle", w1:0, w2:0, label:"Saddle (∇=0, not a minimum)" },
+      presets: [
+        {label:"Right on the saddle", w1:0.02, w2:0.02},
+        {label:"Off to the side", w1:3, w2:3},
+        {label:"Along the ridge", w1:0.05, w2:4}
+      ]
+    },
+    bumpy: {
+      label: "Multiple minima",
+      z: (a,b) => 0.15*(a*a+b*b) + 3*Math.sin(a*1.1)*Math.cos(b*1.1),
+      note: "Several dips of different depths. Which one the ball settles into depends entirely on where it starts — gradient descent has no way of knowing whether a deeper dip exists somewhere else on the map.",
+      marker: { type:"auto", label:"Deepest sampled point" },
+      presets: [
+        {label:"Left basin", w1:-3.5, w2:2.5},
+        {label:"Middle basin", w1:0.3, w2:-0.3},
+        {label:"Right basin", w1:3.5, w2:-2.8}
+      ]
+    },
+    rosenbrock: {
+      label: "Curved valley",
+      z: (a,b) => 0.02*((1-a)*(1-a) + 8*(b-a*a)*(b-a*a)),
+      note: "A long, curved, banana-shaped valley — a classic hard case. The floor is easy to see, but gradient descent tends to zig-zag across the narrow floor rather than run along it. Momentum helps a lot here.",
+      marker: { type:"fixed", w1:1, w2:1, label:"Minimum" },
+      presets: [
+        {label:"Outside the curve", w1:-3.5, w2:4},
+        {label:"On the valley floor", w1:-1, w2:1},
+        {label:"Past the minimum", w1:3, w2:4}
+      ]
+    }
+  };
+
+  const SPEED_MS = {1: 550, 2: 260, 3: 90};
+
+  // ---------- State ----------
+  let currentKey = "bowl";
+  let pos = {w1:-4, w2:4};
+  let vel = {w1:0, w2:0};
+  let path = [];       // array of [w1,w2,z]
+  let iteration = 0;
+  let playing = false;
+  let playTimer = null;
+  let showTrail = true;
+  let showGrad = true;
+  let lr = 0.05;
+  let momentum = 0.0;
+  let gridCache = {};  // per-surface {x,y,Z}
+  let stopped = false;
+
+  // ---------- Math helpers ----------
+  function zAt(key, a, b){ return SURFACES[key].z(a,b); }
+
+  function gradAt(key, a, b){
+    const h = 1e-3;
+    const f = SURFACES[key].z;
+    const dz1 = (f(a+h,b) - f(a-h,b)) / (2*h);
+    const dz2 = (f(a,b+h) - f(a,b-h)) / (2*h);
+    return [dz1, dz2];
+  }
+
+  function buildGrid(key){
+    if(gridCache[key]) return gridCache[key];
+    const n = GRID_N;
+    const x = [], y = [];
+    for(let i=0;i<n;i++){
+      x.push(RANGE[0] + (RANGE[1]-RANGE[0]) * i/(n-1));
+      y.push(RANGE[0] + (RANGE[1]-RANGE[0]) * i/(n-1));
+    }
+    const Z = [];
+    let minZ = Infinity, minI=0, minJ=0;
+    for(let iy=0; iy<n; iy++){
+      const row = [];
+      for(let ix=0; ix<n; ix++){
+        const v = zAt(key, x[ix], y[iy]);
+        row.push(v);
+        if(v < minZ){ minZ = v; minI = iy; minJ = ix; }
+      }
+      Z.push(row);
+    }
+    gridCache[key] = {x, y, Z, autoMin: {w1: x[minJ], w2: y[minI], z: minZ}};
+    return gridCache[key];
+  }
+
+  function getMarker(key){
+    const cfg = SURFACES[key].marker;
+    if(cfg.type === "auto"){
+      const g = buildGrid(key);
+      return { w1: g.autoMin.w1, w2: g.autoMin.w2, z: g.autoMin.z, label: cfg.label };
+    }
+    const z = zAt(key, cfg.w1, cfg.w2);
+    return { w1: cfg.w1, w2: cfg.w2, z, label: cfg.label };
+  }
+
+  // ---------- Plot setup ----------
+  const layoutBase3D = {
+    paper_bgcolor: "#0F1512",
+    plot_bgcolor: "#0F1512",
+    font: { color: "#8FA091", family: "Space Grotesk, sans-serif", size: 11 },
+    margin: {l:0, r:0, t:10, b:0},
+    scene: {
+      xaxis: {title:"w₁", color:"#8FA091", gridcolor:"#2A362C", range: RANGE, backgroundcolor:"#0F1512"},
+      yaxis: {title:"w₂", color:"#8FA091", gridcolor:"#2A362C", range: RANGE, backgroundcolor:"#0F1512"},
+      zaxis: {title:"J(w)", color:"#8FA091", gridcolor:"#2A362C", backgroundcolor:"#0F1512"},
+      camera: {eye:{x:1.5, y:-1.5, z:0.9}}
+    },
+    showlegend:false
+  };
+
+  const layoutBase2D = {
+    paper_bgcolor: "#0F1512",
+    plot_bgcolor: "#0F1512",
+    font: { color: "#8FA091", family: "Space Grotesk, sans-serif", size: 11 },
+    margin: {l:40, r:10, t:10, b:34},
+    xaxis: {title:"w₁", color:"#8FA091", gridcolor:"#2A362C", range: RANGE, zeroline:false},
+    yaxis: {title:"w₂", color:"#8FA091", gridcolor:"#2A362C", range: RANGE, zeroline:false},
+    showlegend:false,
+    annotations: []
+  };
+
+  function surfaceTrace(key){
+    const g = buildGrid(key);
+    return {
+      type:"surface",
+      x:g.x, y:g.y, z:g.Z,
+      colorscale:[[0,"#16261F"],[0.35,"#1F5C4C"],[0.65,"#5FA88F"],[1,"#E3C57C"]],
+      opacity:0.94,
+      showscale:false,
+      contours: { z: { show:true, usecolormap:false, color:"#0F1512", width:1, project:{z:false} } },
+      lighting:{ ambient:0.75, diffuse:0.55, specular:0.15, roughness:0.6 },
+      hoverinfo:"skip"
+    };
+  }
+
+  function contourTrace(key){
+    const g = buildGrid(key);
+    return {
+      type:"contour",
+      x:g.x, y:g.y, z:g.Z,
+      colorscale:[[0,"#16261F"],[0.35,"#1F5C4C"],[0.65,"#5FA88F"],[1,"#E3C57C"]],
+      showscale:false,
+      contours:{ coloring:"heatmap" },
+      line:{ width:0.6, color:"#0F1512" },
+      hoverinfo:"skip"
+    };
+  }
+
+  function markerTrace3D(m){
+    return {
+      type:"scatter3d", mode:"markers+text",
+      x:[m.w1], y:[m.w2], z:[m.z],
+      marker:{ size:5, color:"#6FAF9E" },
+      text:[m.label], textposition:"top center",
+      textfont:{ color:"#6FAF9E", size:11 },
+      hoverinfo:"skip"
+    };
+  }
+  function markerTrace2D(m){
+    return {
+      type:"scatter", mode:"markers",
+      x:[m.w1], y:[m.w2],
+      marker:{ size:9, color:"#6FAF9E", symbol:"x" },
+      hoverinfo:"skip"
+    };
+  }
+
+  function pathTrace3D(){
+    return {
+      type:"scatter3d", mode:"lines",
+      x: path.map(p=>p[0]), y: path.map(p=>p[1]), z: path.map(p=>p[2]),
+      line:{ color:"#E3A857", width:4 },
+      visible: showTrail,
+      hoverinfo:"skip"
+    };
+  }
+  function pathTrace2D(){
+    return {
+      type:"scatter", mode:"lines",
+      x: path.map(p=>p[0]), y: path.map(p=>p[1]),
+      line:{ color:"#E3A857", width:2 },
+      visible: showTrail,
+      hoverinfo:"skip"
+    };
+  }
+
+  function ballTrace3D(){
+    const last = path[path.length-1];
+    return {
+      type:"scatter3d", mode:"markers",
+      x:[last[0]], y:[last[1]], z:[last[2]],
+      marker:{ size:6.5, color:"#E3A857", line:{color:"#0F1512", width:1} },
+      hoverinfo:"skip"
+    };
+  }
+  function ballTrace2D(){
+    const last = path[path.length-1];
+    return {
+      type:"scatter", mode:"markers",
+      x:[last[0]], y:[last[1]],
+      marker:{ size:11, color:"#E3A857", line:{color:"#0F1512", width:1} },
+      hoverinfo:"skip"
+    };
+  }
+
+  // ---------- Render ----------
+  function fullRedraw(){
+    const key = currentKey;
+    const marker = getMarker(key);
+
+    const traces3D = [ surfaceTrace(key), markerTrace3D(marker), pathTrace3D(), ballTrace3D() ];
+    Plotly.newPlot("plot3d", traces3D, Object.assign({}, layoutBase3D, {
+      scene: Object.assign({}, layoutBase3D.scene, {
+        zaxis: Object.assign({}, layoutBase3D.scene.zaxis)
+      })
+    }), {displayModeBar:false, responsive:true});
+
+    const traces2D = [ contourTrace(key), markerTrace2D(marker), pathTrace2D(), ballTrace2D() ];
+    const layout2D = Object.assign({}, layoutBase2D, { annotations: gradAnnotation() });
+    Plotly.newPlot("plot2d", traces2D, layout2D, {displayModeBar:false, responsive:true});
+
+    attachClickHandlers();
+    updateReadout();
+  }
+
+  function gradAnnotation(){
+    if(!showGrad || path.length===0) return [];
+    const last = path[path.length-1];
+    const g = gradAt(currentKey, last[0], last[1]);
+    const mag = Math.hypot(g[0], g[1]);
+    if(mag < 1e-6) return [];
+    const scale = 0.9 / mag; // fixed visual length
+    const dx = -g[0]*scale, dy = -g[1]*scale;
+    return [{
+      x: last[0] + dx, y: last[1] + dy,
+      ax: last[0], ay: last[1],
+      xref:"x", yref:"y", axref:"x", ayref:"y",
+      showarrow:true, arrowhead:2, arrowsize:1.2, arrowwidth:1.6,
+      arrowcolor:"#D9836F"
+    }];
+  }
+
+  function restyleMoving(){
+    Plotly.restyle("plot3d", { x:[path.map(p=>p[0])], y:[path.map(p=>p[1])], z:[path.map(p=>p[2])], visible:showTrail }, [2]);
+    Plotly.restyle("plot3d", { x:[[path[path.length-1][0]]], y:[[path[path.length-1][1]]], z:[[path[path.length-1][2]]] }, [3]);
+
+    Plotly.restyle("plot2d", { x:[path.map(p=>p[0])], y:[path.map(p=>p[1])], visible:showTrail }, [2]);
+    Plotly.restyle("plot2d", { x:[[path[path.length-1][0]]], y:[[path[path.length-1][1]]] }, [3]);
+    Plotly.relayout("plot2d", { annotations: gradAnnotation() });
+
+    updateReadout();
+  }
+
+  // ---------- Gradient descent step ----------
+  function resetToPoint(w1, w2){
+    pause();
+    pos = {w1, w2};
+    vel = {w1:0, w2:0};
+    iteration = 0;
+    stopped = false;
+    const z = zAt(currentKey, w1, w2);
+    path = [[w1, w2, z]];
+    setStatus("Ready. Press Play or Step to start descending.", "");
+    restyleMoving();
+  }
+
+  function doStep(){
+    if(stopped) return;
+    const g = gradAt(currentKey, pos.w1, pos.w2);
+    vel.w1 = momentum*vel.w1 - lr*g[0];
+    vel.w2 = momentum*vel.w2 - lr*g[1];
+    pos.w1 = clamp(pos.w1 + vel.w1, RANGE[0]*1.6, RANGE[1]*1.6);
+    pos.w2 = clamp(pos.w2 + vel.w2, RANGE[0]*1.6, RANGE[1]*1.6);
+    const z = zAt(currentKey, pos.w1, pos.w2);
+    iteration++;
+    path.push([pos.w1, pos.w2, z]);
+
+    const gradMag = Math.hypot(g[0], g[1]);
+
+    if(!isFinite(z) || Math.abs(z) > 1e6){
+      stopped = true; pause();
+      setStatus("Diverged — the steps grew without bound. Try a smaller learning rate.", "warn");
+    } else if(gradMag < 0.01){
+      stopped = true; pause();
+      setStatus("Converged — the gradient is essentially flat here.", "good");
+    } else if(iteration >= 600){
+      stopped = true; pause();
+      setStatus("Stopped after 600 steps without converging.", "warn");
+    } else {
+      setStatus("Descending…", "");
+    }
+    restyleMoving();
+  }
+
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+  function play(){
+    if(playing) return;
+    if(stopped){ setStatus("This run has stopped. Reset or pick a new start to continue.", "warn"); return; }
+    playing = true;
+    document.getElementById("btn-play").textContent = "Pause";
+    document.getElementById("btn-play").classList.add("playing");
+    const ms = SPEED_MS[document.getElementById("speed-slider").value];
+    playTimer = setInterval(doStep, ms);
+  }
+  function pause(){
+    playing = false;
+    document.getElementById("btn-play").textContent = "Play";
+    document.getElementById("btn-play").classList.remove("playing");
+    if(playTimer){ clearInterval(playTimer); playTimer = null; }
+  }
+
+  function setStatus(msg, cls){
+    const el = document.getElementById("status-line");
+    el.textContent = msg;
+    el.className = cls || "";
+  }
+
+  function updateReadout(){
+    const last = path[path.length-1];
+    document.getElementById("s-iter").textContent = iteration;
+    document.getElementById("s-w1").textContent = last[0].toFixed(3);
+    document.getElementById("s-w2").textContent = last[1].toFixed(3);
+    document.getElementById("s-loss").textContent = last[2].toFixed(4);
+    const g = gradAt(currentKey, last[0], last[1]);
+    document.getElementById("s-grad").textContent = Math.hypot(g[0], g[1]).toFixed(4);
+  }
+
+  // ---------- UI wiring ----------
+  function buildSurfaceButtons(){
+    const wrap = document.getElementById("surface-buttons");
+    wrap.innerHTML = "";
+    Object.keys(SURFACES).forEach(key=>{
+      const b = document.createElement("button");
+      b.className = "surf-btn" + (key===currentKey ? " active":"");
+      b.textContent = SURFACES[key].label;
+      b.onclick = () => selectSurface(key);
+      wrap.appendChild(b);
+    });
+    document.getElementById("surface-note").textContent = SURFACES[currentKey].note;
+  }
+
+  function buildPresetButtons(){
+    const wrap = document.getElementById("preset-buttons");
+    wrap.innerHTML = "";
+    SURFACES[currentKey].presets.forEach(p=>{
+      const b = document.createElement("button");
+      b.className = "chip";
+      b.textContent = p.label;
+      b.onclick = () => resetToPoint(p.w1, p.w2);
+      wrap.appendChild(b);
+    });
+  }
+
+  function selectSurface(key){
+    currentKey = key;
+    document.querySelectorAll(".surf-btn").forEach(b=>b.classList.remove("active"));
+    buildSurfaceButtons();
+    buildPresetButtons();
+    const preset = SURFACES[key].presets[0];
+    resetToPoint(preset.w1, preset.w2);
+    fullRedraw();
+  }
+
+  function attachClickHandlers(){
+    const p3 = document.getElementById("plot3d");
+    const p2 = document.getElementById("plot2d");
+    p3.removeAllListeners && p3.removeAllListeners("plotly_click");
+    p2.removeAllListeners && p2.removeAllListeners("plotly_click");
+    p3.on("plotly_click", (ev)=>{
+      const pt = ev.points && ev.points[0];
+      if(!pt || pt.curveNumber !== 0) return;
+      resetToPoint(pt.x, pt.y);
+    });
+    p2.on("plotly_click", (ev)=>{
+      const pt = ev.points && ev.points[0];
+      if(!pt) return;
+      resetToPoint(pt.x, pt.y);
+    });
+  }
+
+  // sliders
+  const lrSlider = document.getElementById("lr-slider");
+  const moSlider = document.getElementById("mo-slider");
+  const speedSlider = document.getElementById("speed-slider");
+
+  function lrFromSlider(v){
+    // log scale from 0.002 to 0.6
+    const t = v/100;
+    return +(0.002 * Math.pow(300, t)).toFixed(4);
+  }
+
+  lrSlider.addEventListener("input", ()=>{
+    lr = lrFromSlider(+lrSlider.value);
+    document.getElementById("lr-val").textContent = lr.toFixed(3);
+  });
+  moSlider.addEventListener("input", ()=>{
+    momentum = (+moSlider.value)/100;
+    document.getElementById("mo-val").textContent = momentum.toFixed(2);
+  });
+  speedSlider.addEventListener("input", ()=>{
+    const label = {1:"slow",2:"medium",3:"fast"}[speedSlider.value];
+    document.getElementById("speed-val").textContent = label;
+    if(playing){ pause(); play(); }
+  });
+
+  document.getElementById("btn-play").onclick = ()=> playing ? pause() : play();
+  document.getElementById("btn-step").onclick = ()=> { pause(); doStep(); };
+  document.getElementById("btn-reset").onclick = ()=> {
+    const preset = SURFACES[currentKey].presets[0];
+    resetToPoint(pos.w1, pos.w2); // keep current start, clear velocity/path
+  };
+  document.getElementById("btn-random").onclick = ()=>{
+    const w1 = (Math.random()*2-1) * 4.3;
+    const w2 = (Math.random()*2-1) * 4.3;
+    resetToPoint(w1, w2);
+  };
+
+  function wireToggle(id, getVal, setVal){
+    const el = document.getElementById(id);
+    el.onclick = () => {
+      setVal(!getVal());
+      el.classList.toggle("on", getVal());
+      restyleMoving();
+    };
+  }
+  wireToggle("toggle-trail", ()=>showTrail, (v)=>showTrail=v);
+  wireToggle("toggle-grad", ()=>showGrad, (v)=>showGrad=v);
+
+  // ---------- Init ----------
+  lr = lrFromSlider(+lrSlider.value);
+  document.getElementById("lr-val").textContent = lr.toFixed(3);
+  momentum = (+moSlider.value)/100;
+  document.getElementById("mo-val").textContent = momentum.toFixed(2);
+
+  buildSurfaceButtons();
+  buildPresetButtons();
+  resetToPoint(-4, 4);
+  fullRedraw();
+
+  window.addEventListener("resize", ()=>{
+    Plotly.Plots.resize(document.getElementById("plot3d"));
+    Plotly.Plots.resize(document.getElementById("plot2d"));
+  });
+
+})();
+</script>
+</body>
+</html>
