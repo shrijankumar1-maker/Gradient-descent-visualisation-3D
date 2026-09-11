@@ -305,10 +305,19 @@
 
   <header>
     <h1>Chasing the Minimum</h1>
-    <p>Pick a loss landscape, drop a ball anywhere on it, and watch how the starting point, learning rate, and momentum change the way it finds — or fails to find — the bottom.</p>
+    <p>Pick a loss landscape, drop a ball anywhere on it, and watch gradient descent take repeated small steps downhill — using nothing but the slope under the ball — until it settles at the bottom.</p>
   </header>
 
   <div id="sidebar">
+
+    <section class="control">
+      <h2>How this works</h2>
+      <div class="note">
+        The surface is a <b>loss function</b> — it scores how wrong a model's guess is at every combination of two weights, w₁ and w₂. Lower is better.
+        <br><br>
+        At each step, gradient descent looks at the <b>gradient</b> (the slope right under the ball) and moves a little in the opposite direction — downhill. It repeats this over and over, taking one small step at a time, never seeing the whole landscape at once.
+      </div>
+    </section>
 
     <section class="control">
       <h2>Landscape</h2>
@@ -331,14 +340,7 @@
         <div class="slider-label"><span>Step size (η)</span><span class="val mono" id="lr-val">0.05</span></div>
         <input type="range" id="lr-slider" min="0" max="100" value="35">
       </div>
-    </section>
-
-    <section class="control">
-      <h2>Momentum</h2>
-      <div class="slider-row">
-        <div class="slider-label"><span>Carry-over (β)</span><span class="val mono" id="mo-val">0.00</span></div>
-        <input type="range" id="mo-slider" min="0" max="95" value="0">
-      </div>
+      <div class="hint">This is how big a step the ball takes downhill each time. Too small and it crawls; too large and it can overshoot the bottom or even bounce away and diverge. Try dragging this while playing a run.</div>
     </section>
 
     <section class="control">
@@ -379,6 +381,11 @@
         <div class="stat"><span class="k">w₂</span><span class="v mono" id="s-w2">–</span></div>
         <div class="stat"><span class="k">Loss J(w)</span><span class="v mono" id="s-loss">–</span></div>
         <div class="stat"><span class="k">|∇J|</span><span class="v mono" id="s-grad">–</span></div>
+        <div class="note" style="margin-top:12px;">
+          <b>w₁, w₂</b> — the two weights being learned; together they're the ball's position.<br>
+          <b>Loss J(w)</b> — how bad the current weights are. Lower is better; 0 is the very bottom.<br>
+          <b>|∇J|</b> — the size of the gradient, i.e. how steep it is right here. It shrinks to (almost) zero once the ball has settled at a minimum — that's how gradient descent knows to stop.
+        </div>
         <div id="status-line">Pick a landscape and a starting point, then press Play.</div>
       </div>
     </div>
@@ -424,7 +431,7 @@
     valley: {
       label: "Narrow valley",
       z: (a,b) => 0.15*(a-2)*(a-2) + 3.5*(b+1)*(b+1),
-      note: "The floor is a steep, narrow trough. A step size sized for the steep direction makes the ball bounce wall-to-wall instead of sliding along the shallow direction. Add momentum to smooth it out.",
+      note: "The floor is a steep, narrow trough. A step size that suits the steep direction is far too big for the shallow one, so the ball bounces wall-to-wall instead of sliding smoothly along the floor. Try a smaller learning rate here.",
       marker: { type:"fixed", w1:2, w2:-1, label:"Minimum" },
       presets: [
         {label:"On the steep wall", w1:2, w2:4},
@@ -457,7 +464,7 @@
     rosenbrock: {
       label: "Curved valley",
       z: (a,b) => 0.02*((1-a)*(1-a) + 8*(b-a*a)*(b-a*a)),
-      note: "A long, curved, banana-shaped valley — a classic hard case. The floor is easy to see, but gradient descent tends to zig-zag across the narrow floor rather than run along it. Momentum helps a lot here.",
+      note: "A long, curved, banana-shaped valley — a classic hard case. The floor is easy to see, but gradient descent tends to zig-zag across the narrow floor in small steps rather than run smoothly along it, so it can take a while to reach the minimum.",
       marker: { type:"fixed", w1:1, w2:1, label:"Minimum" },
       presets: [
         {label:"Outside the curve", w1:-3.5, w2:4},
@@ -472,7 +479,6 @@
   // ---------- State ----------
   let currentKey = "bowl";
   let pos = {w1:-4, w2:4};
-  let vel = {w1:0, w2:0};
   let path = [];       // array of [w1,w2,z]
   let iteration = 0;
   let playing = false;
@@ -480,7 +486,6 @@
   let showTrail = true;
   let showGrad = true;
   let lr = 0.05;
-  let momentum = 0.0;
   let gridCache = {};  // per-surface {x,y,Z}
   let stopped = false;
   let plot3dReady = false; // true only once Plotly.newPlot("plot3d",...) has resolved
@@ -740,7 +745,6 @@
   function setPoint(w1, w2){
     pause();
     pos = {w1, w2};
-    vel = {w1:0, w2:0};
     iteration = 0;
     stopped = false;
     const z = zAt(currentKey, w1, w2);
@@ -758,10 +762,9 @@
   function doStep(){
     if(stopped) return;
     const g = gradAt(currentKey, pos.w1, pos.w2);
-    vel.w1 = momentum*vel.w1 - lr*g[0];
-    vel.w2 = momentum*vel.w2 - lr*g[1];
-    pos.w1 = clamp(pos.w1 + vel.w1, RANGE[0]*1.6, RANGE[1]*1.6);
-    pos.w2 = clamp(pos.w2 + vel.w2, RANGE[0]*1.6, RANGE[1]*1.6);
+    // The core gradient descent rule: move a small step (lr) opposite the gradient.
+    pos.w1 = clamp(pos.w1 - lr*g[0], RANGE[0]*1.6, RANGE[1]*1.6);
+    pos.w2 = clamp(pos.w2 - lr*g[1], RANGE[0]*1.6, RANGE[1]*1.6);
     const z = zAt(currentKey, pos.w1, pos.w2);
     iteration++;
     path.push([pos.w1, pos.w2, z]);
@@ -876,7 +879,6 @@
 
   // sliders
   const lrSlider = document.getElementById("lr-slider");
-  const moSlider = document.getElementById("mo-slider");
   const speedSlider = document.getElementById("speed-slider");
 
   function lrFromSlider(v){
@@ -889,10 +891,6 @@
     lr = lrFromSlider(+lrSlider.value);
     document.getElementById("lr-val").textContent = lr.toFixed(3);
   });
-  moSlider.addEventListener("input", ()=>{
-    momentum = (+moSlider.value)/100;
-    document.getElementById("mo-val").textContent = momentum.toFixed(2);
-  });
   speedSlider.addEventListener("input", ()=>{
     const label = {1:"slow",2:"medium",3:"fast"}[speedSlider.value];
     document.getElementById("speed-val").textContent = label;
@@ -902,7 +900,7 @@
   document.getElementById("btn-play").onclick = ()=> playing ? pause() : play();
   document.getElementById("btn-step").onclick = ()=> { pause(); doStep(); };
   document.getElementById("btn-reset").onclick = ()=> {
-    resetToPoint(pos.w1, pos.w2); // keep current start, clear velocity/path
+    resetToPoint(pos.w1, pos.w2); // keep current start, clear the path so far
   };
   document.getElementById("btn-random").onclick = ()=>{
     const w1 = (Math.random()*2-1) * 4.3;
@@ -924,8 +922,6 @@
   // ---------- Init ----------
   lr = lrFromSlider(+lrSlider.value);
   document.getElementById("lr-val").textContent = lr.toFixed(3);
-  momentum = (+moSlider.value)/100;
-  document.getElementById("mo-val").textContent = momentum.toFixed(2);
 
   buildSurfaceButtons();
   buildPresetButtons();
