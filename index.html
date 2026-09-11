@@ -281,6 +281,10 @@
   #status-line.warn{ border-left-color: var(--warn); color: var(--warn); }
   #status-line.good{ border-left-color: var(--amber); color: var(--amber); }
 
+  /* While a chart (re)draw is in flight, controls are inert so nobody can
+     trigger an update against a plot that isn't there yet. */
+  #sidebar.loading{ opacity:.5; pointer-events:none; transition:opacity .15s; }
+
   @media (max-width: 880px){
     #app{
       grid-template-columns: 1fr;
@@ -386,10 +390,18 @@
 (function(){
 
   if (typeof Plotly === "undefined") {
-    document.getElementById("plot3d").innerHTML =
-      '<div style="padding:24px;color:#D9836F;font-family:sans-serif;">' +
-      'Plotly failed to load from the CDN. Check your internet connection, ' +
-      'disable any ad blocker for this page, and reload.</div>';
+    const failMsg =
+      '<div style="padding:24px;color:#D9836F;font-family:sans-serif;font-size:13.5px;line-height:1.5;">' +
+      'The chart library (plotly.min.js) did not load, so nothing can be drawn here. ' +
+      'This usually means the file is missing or misnamed on the server — check that ' +
+      '<code>plotly.min.js</code> sits in the same folder as this page, with that exact ' +
+      'name and capitalization, then reload.</div>';
+    document.getElementById("plot3d").innerHTML = failMsg;
+    document.getElementById("plot2d").innerHTML = failMsg;
+    document.getElementById("sidebar").classList.add("loading");
+    const statusEl = document.getElementById("status-line");
+    statusEl.textContent = "Chart library failed to load — see message above.";
+    statusEl.className = "warn";
     return;
   }
 
@@ -471,6 +483,8 @@
   let momentum = 0.0;
   let gridCache = {};  // per-surface {x,y,Z}
   let stopped = false;
+  let plot3dReady = false; // true only once Plotly.newPlot("plot3d",...) has resolved
+  let plot2dReady = false; // true only once Plotly.newPlot("plot2d",...) has resolved
 
   // ---------- Math helpers ----------
   function zAt(key, a, b){ return SURFACES[key].z(a,b); }
@@ -627,23 +641,59 @@
   }
 
   // ---------- Render ----------
+  // fullRedraw() is the only place that calls Plotly.newPlot(). Everything else
+  // (restyleMoving) only ever patches an existing chart, and only once that
+  // chart's newPlot() promise has actually resolved — that's what plot3dReady /
+  // plot2dReady track. This is what the "Cannot read properties of undefined
+  // (reading 'length')" error was: restyle() was being called against a chart
+  // that Plotly hadn't finished (or hadn't managed) to draw yet.
   function fullRedraw(){
     const key = currentKey;
     const marker = getMarker(key);
 
     const traces3D = [ surfaceTrace(key), markerTrace3D(marker), pathTrace3D(), ballTrace3D() ];
-    Plotly.newPlot("plot3d", traces3D, Object.assign({}, layoutBase3D, {
+    const layout3D = Object.assign({}, layoutBase3D, {
       scene: Object.assign({}, layoutBase3D.scene, {
         zaxis: Object.assign({}, layoutBase3D.scene.zaxis)
       })
-    }), {displayModeBar:false, responsive:true});
+    });
 
     const traces2D = [ contourTrace(key), markerTrace2D(marker), pathTrace2D(), ballTrace2D() ];
     const layout2D = Object.assign({}, layoutBase2D, { annotations: gradAnnotation() });
-    Plotly.newPlot("plot2d", traces2D, layout2D, {displayModeBar:false, responsive:true});
 
-    attachClickHandlers();
-    updateReadout();
+    plot3dReady = false;
+    plot2dReady = false;
+    document.getElementById("sidebar").classList.add("loading");
+    setStatus("Loading chart…", "");
+
+    const p3promise = Plotly.newPlot("plot3d", traces3D, layout3D, {displayModeBar:false, responsive:true})
+      .then(()=>{ plot3dReady = true; })
+      .catch(err=>{
+        console.error("Gradient descent lab: 3D chart failed to render", err);
+        document.getElementById("plot3d").innerHTML =
+          '<div style="padding:20px;color:#D9836F;font-family:sans-serif;font-size:13px;">' +
+          'The 3D view couldn\'t be drawn in this browser. The 2D map below still works.</div>';
+      });
+
+    const p2promise = Plotly.newPlot("plot2d", traces2D, layout2D, {displayModeBar:false, responsive:true})
+      .then(()=>{ plot2dReady = true; })
+      .catch(err=>{
+        console.error("Gradient descent lab: 2D chart failed to render", err);
+        document.getElementById("plot2d").innerHTML =
+          '<div style="padding:20px;color:#D9836F;font-family:sans-serif;font-size:13px;">' +
+          'This chart couldn\'t be drawn. Try reloading the page.</div>';
+      });
+
+    Promise.all([p3promise, p2promise]).then(()=>{
+      document.getElementById("sidebar").classList.remove("loading");
+      attachClickHandlers();
+      updateReadout();
+      if(plot3dReady || plot2dReady){
+        setStatus("Ready. Press Play or Step to start descending.", "");
+      } else {
+        setStatus("The chart couldn't be drawn — try reloading the page.", "warn");
+      }
+    });
   }
 
   function gradAnnotation(){
@@ -664,13 +714,23 @@
   }
 
   function restyleMoving(){
-    Plotly.restyle("plot3d", { x:[path.map(p=>p[0])], y:[path.map(p=>p[1])], z:[path.map(p=>p[2])], visible:showTrail }, [2]);
-    Plotly.restyle("plot3d", { x:[[path[path.length-1][0]]], y:[[path[path.length-1][1]]], z:[[path[path.length-1][2]]] }, [3]);
-
-    Plotly.restyle("plot2d", { x:[path.map(p=>p[0])], y:[path.map(p=>p[1])], visible:showTrail }, [2]);
-    Plotly.restyle("plot2d", { x:[[path[path.length-1][0]]], y:[[path[path.length-1][1]]] }, [3]);
-    Plotly.relayout("plot2d", { annotations: gradAnnotation() });
-
+    try{
+      if(plot3dReady){
+        Plotly.restyle("plot3d", { x:[path.map(p=>p[0])], y:[path.map(p=>p[1])], z:[path.map(p=>p[2])], visible:showTrail }, [2]);
+        Plotly.restyle("plot3d", { x:[[path[path.length-1][0]]], y:[[path[path.length-1][1]]], z:[[path[path.length-1][2]]] }, [3]);
+      }
+      if(plot2dReady){
+        Plotly.restyle("plot2d", { x:[path.map(p=>p[0])], y:[path.map(p=>p[1])], visible:showTrail }, [2]);
+        Plotly.restyle("plot2d", { x:[[path[path.length-1][0]]], y:[[path[path.length-1][1]]] }, [3]);
+        Plotly.relayout("plot2d", { annotations: gradAnnotation() });
+      }
+    } catch(err){
+      // A chart got into a state restyle() couldn't patch (e.g. it lost its
+      // Plotly binding). Rebuild it from scratch instead of throwing.
+      console.warn("Gradient descent lab: restyle failed, doing a full redraw instead", err);
+      fullRedraw();
+      return;
+    }
     updateReadout();
   }
 
@@ -796,18 +856,22 @@
   function attachClickHandlers(){
     const p3 = document.getElementById("plot3d");
     const p2 = document.getElementById("plot2d");
-    p3.removeAllListeners && p3.removeAllListeners("plotly_click");
-    p2.removeAllListeners && p2.removeAllListeners("plotly_click");
-    p3.on("plotly_click", (ev)=>{
-      const pt = ev.points && ev.points[0];
-      if(!pt || pt.curveNumber !== 0) return;
-      resetToPoint(pt.x, pt.y);
-    });
-    p2.on("plotly_click", (ev)=>{
-      const pt = ev.points && ev.points[0];
-      if(!pt) return;
-      resetToPoint(pt.x, pt.y);
-    });
+    if(plot3dReady && p3.removeAllListeners){
+      p3.removeAllListeners("plotly_click");
+      p3.on("plotly_click", (ev)=>{
+        const pt = ev.points && ev.points[0];
+        if(!pt || pt.curveNumber !== 0) return;
+        resetToPoint(pt.x, pt.y);
+      });
+    }
+    if(plot2dReady && p2.removeAllListeners){
+      p2.removeAllListeners("plotly_click");
+      p2.on("plotly_click", (ev)=>{
+        const pt = ev.points && ev.points[0];
+        if(!pt) return;
+        resetToPoint(pt.x, pt.y);
+      });
+    }
   }
 
   // sliders
@@ -869,8 +933,12 @@
   fullRedraw();
 
   window.addEventListener("resize", ()=>{
-    Plotly.Plots.resize(document.getElementById("plot3d"));
-    Plotly.Plots.resize(document.getElementById("plot2d"));
+    try{
+      if(plot3dReady) Plotly.Plots.resize(document.getElementById("plot3d"));
+      if(plot2dReady) Plotly.Plots.resize(document.getElementById("plot2d"));
+    } catch(err){
+      console.warn("Gradient descent lab: resize failed", err);
+    }
   });
 
 })();
