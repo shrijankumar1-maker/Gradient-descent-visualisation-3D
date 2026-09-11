@@ -536,16 +536,25 @@
   }
 
   // ---------- Plot setup ----------
+  // uirevision is Plotly's mechanism for keeping the camera angle (3D) and
+  // zoom/pan (2D) as the user left them across Plotly.restyle()/relayout()
+  // calls. Without it, every restyleMoving() tick during Play snaps the 3D
+  // camera back to its default eye position, which is exactly what made the
+  // 3D chart feel "stuck" and impossible to rotate or zoom while playing.
+  const UI_REVISION = "gd-lab";
+
   const layoutBase3D = {
     paper_bgcolor: "#0F1512",
     plot_bgcolor: "#0F1512",
     font: { color: "#8FA091", family: "Space Grotesk, sans-serif", size: 11 },
     margin: {l:0, r:0, t:10, b:0},
+    uirevision: UI_REVISION,
     scene: {
       xaxis: {title:"w₁", color:"#8FA091", gridcolor:"#2A362C", range: RANGE, backgroundcolor:"#0F1512"},
       yaxis: {title:"w₂", color:"#8FA091", gridcolor:"#2A362C", range: RANGE, backgroundcolor:"#0F1512"},
       zaxis: {title:"J(w)", color:"#8FA091", gridcolor:"#2A362C", backgroundcolor:"#0F1512"},
-      camera: {eye:{x:1.5, y:-1.5, z:0.9}}
+      camera: {eye:{x:1.5, y:-1.5, z:0.9}},
+      uirevision: UI_REVISION
     },
     showlegend:false
   };
@@ -555,11 +564,13 @@
     plot_bgcolor: "#0F1512",
     font: { color: "#8FA091", family: "Space Grotesk, sans-serif", size: 11 },
     margin: {l:40, r:10, t:10, b:34},
+    uirevision: UI_REVISION,
     xaxis: {title:"w₁", color:"#8FA091", gridcolor:"#2A362C", range: RANGE, zeroline:false},
     yaxis: {title:"w₂", color:"#8FA091", gridcolor:"#2A362C", range: RANGE, zeroline:false},
     showlegend:false,
     annotations: []
   };
+
 
   function surfaceTrace(key){
     const g = buildGrid(key);
